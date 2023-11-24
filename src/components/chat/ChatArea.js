@@ -1,6 +1,7 @@
 import ChatMessage from './ChatMessage';
 import MessageInput from './MessageInput';
 import React from 'react';
+import { db } from '../../firebase';
 
 const style = {
     chatAreaWrapper: `chat-area flex flex-col h-full mx-2`,

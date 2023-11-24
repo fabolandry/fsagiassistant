@@ -1,7 +1,10 @@
 "use client";
 
-import React, { useState } from 'react';
+import React, { useState, useContext } from 'react';
 import { MdSend } from 'react-icons/md';
+import { db } from '../../firebase';
+import { AuthContext } from '../../AuthContext';
+import { collection, addDoc, serverTimestamp, doc } from 'firebase/firestore';
 
 const style = {
     messageInputWrapper: `flex-2 pt-4 pb-4`,
@@ -19,15 +22,32 @@ const style = {
 
 const MessageInput = () => {
   const [message, setMessage] = useState('');
+  const { currentUser } = useContext(AuthContext);
 
   const handleInputChange = (e) => {
     setMessage(e.target.value);
   };
 
-  const handleSendMessage = () => {
-    console.log("Message Sent:", message);
-    // Add logic to send the message
-    setMessage(''); // Clear the input after sending
+  const handleSendMessage = async () => {
+    try {
+      if (currentUser) {
+        const timestamp = Date.now();
+        const chatId = `${currentUser.uid}-${timestamp}`;
+  
+        await addDoc(collection(db, 'chats', chatId, 'messages'), {
+          text: message,
+          timestamp: serverTimestamp(),
+          // Add other fields as necessary, such as the user ID
+        });
+  
+        console.log("Message Sent:", message);
+        setMessage(''); // Clear the input after sending
+      } else {
+        console.error("No user is signed in.");
+      }
+    } catch (error) {
+      console.error("Error sending message: ", error);
+    }
   };
 
   return (

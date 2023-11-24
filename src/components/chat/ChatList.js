@@ -1,4 +1,5 @@
 import React from 'react';
+import { db } from '../../firebase';
 
 const style = {
     chatListWrapper: `flex-1 h-full overflow-auto px-2`,
