@@ -1,5 +1,8 @@
-import React from 'react';
+"use client";
+
+import React, { useState, useEffect } from 'react';
 import { db } from '../../firebase';
+import { collection, query, onSnapshot } from 'firebase/firestore';
 
 const style = {
     chatListWrapper: `flex-1 h-full overflow-auto px-2`,
@@ -14,28 +17,26 @@ const style = {
     chatDate: `flex-2 text-right text-gray-500`
 };
 
+
 const ChatList = () => {
-  const chats = [
-    { id: 1, name: "Ryann Remo", lastMessage: "Yea, Sure!", date: "15 April", status: "online" },
-    { id: 2, name: "Karp Bonolo", lastMessage: "Yea, Sure!", date: "15 April", status: "offline" },
-    // Add more chat data here
-  ];
+
+  const chatSessions = []
 
   return (
     <div className={style.chatListWrapper}>
       <h2 className={style.chatHistoryTitle}>Chat History</h2>
-      {chats.map((chat) => (
-        <div key={chat.id} className={style.chatEntry}>
-          <div className={style.chatProfileImageWrapper}>
-            <img className={style.chatProfileImage} src="../resources/profile-image.png" alt="chat-user" />
-            <span className={style.chatStatusIndicator(chat.status)}></span>
-          </div>
+      {chatSessions.map((session) => (
+        <div key={session.id} className={style.chatEntry}>
+          {/* Display chat session details here */}
+          {/* For example, if you have a 'lastMessage' field in your chat session documents */}
           <div className={style.chatInfo}>
-            <div className={style.chatName}>{chat.name}</div>
-            <div className={style.chatLastMessage}><small>{chat.lastMessage}</small></div>
+            {/* You might want to add a field to your chat documents to store the name */}
+            <div className={style.chatName}>{session.name || 'Anonymous'}</div>
+            <div className={style.chatLastMessage}><small>{session.lastMessage || 'No messages yet'}</small></div>
           </div>
+          {/* You might want to format the timestamp into a readable date */}
           <div className={style.chatDate}>
-            <small>{chat.date}</small>
+            <small>{new Date(session.timestamp).toLocaleString() || 'Date unknown'}</small>
           </div>
         </div>
       ))}

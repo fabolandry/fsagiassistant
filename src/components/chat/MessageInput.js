@@ -4,7 +4,15 @@ import React, { useState, useContext } from 'react';
 import { MdSend } from 'react-icons/md';
 import { db } from '../../firebase';
 import { AuthContext } from '../../AuthContext';
-import { collection, addDoc, serverTimestamp, doc } from 'firebase/firestore';
+import { collection, addDoc, serverTimestamp, setDoc, doc, getDocs, query, orderBy, limit } from 'firebase/firestore';
+import OpenAI from 'openai';
+
+
+const openai = new OpenAI({
+  apiKey: process.env.NEXT_PUBLIC_OPENAI_API_KEY,
+  dangerouslyAllowBrowser: true 
+});
+
 
 const style = {
     messageInputWrapper: `flex-2 pt-4 pb-4`,
@@ -22,33 +30,153 @@ const style = {
 
 const MessageInput = () => {
   const [message, setMessage] = useState('');
-  const { currentUser } = useContext(AuthContext);
+  const { currentUser, currentChatSessionId, setCurrentChatSessionId } = useContext(AuthContext);
+
+  // Function to save a message
+  const saveMessage = async (chatSessionId, userId, text) => {
+    const chatSessionRef = doc(db, "chatSessions", chatSessionId);
+    const messagesRef = collection(chatSessionRef, "messages");
+
+    await addDoc(messagesRef, {
+      sender: userId,
+      timestamp: serverTimestamp(),
+      textContent: text
+    });
+  };
+
+  // Function to create a new chat session
+  const createChatSession = async (userId) => {
+    try {
+      const chatSessionsRef = collection(db, "chatSessions");
+      const newSessionDocRef = await addDoc(chatSessionsRef, {
+        userId: userId,
+        startTime: serverTimestamp(),
+        lastMessage: ""
+      });
+      return newSessionDocRef.id; // Ensure we return the ID of the new document
+    } catch (error) {
+      console.error("Error creating new chat session:", error);
+    }
+  };
+  
+
+  // Function to update the last message in a chat session
+  const updateLastMessage = async (chatSessionId, lastMessageText) => {
+    const chatSessionRef = doc(db, "chatSessions", chatSessionId);
+    await setDoc(chatSessionRef, {
+      lastMessage: lastMessageText,
+      endTime: serverTimestamp()
+    }, { merge: true });
+  };
+  
 
   const handleInputChange = (e) => {
     setMessage(e.target.value);
   };
 
-  const handleSendMessage = async () => {
+  // Function to retrieve the last 100 messages for the current session
+  const fetchMessages = async (chatSessionId) => {
+    if (!db) {
+      console.error('Firestore instance (db) is null. Make sure it is initialized correctly.');
+      return [];
+    }
+    if (!chatSessionId) {
+      console.error('Session ID is null. Make sure it is being set correctly.');
+      return [];
+    }
+  
+    const messages = [];
     try {
-      if (currentUser) {
-        const timestamp = Date.now();
-        const chatId = `${currentUser.uid}-${timestamp}`;
+      const chatSessionRef = doc(db, "chatSessions", chatSessionId);
+      const messagesRef = collection(chatSessionRef, "messages");
   
-        await addDoc(collection(db, 'chats', chatId, 'messages'), {
-          text: message,
-          timestamp: serverTimestamp(),
-          // Add other fields as necessary, such as the user ID
-        });
+      // Order by 'timestamp' and limit to the last 100 messages
+      const q = query(messagesRef, orderBy("timestamp", "desc"), limit(100));
   
-        console.log("Message Sent:", message);
-        setMessage(''); // Clear the input after sending
-      } else {
-        console.error("No user is signed in.");
-      }
+      const querySnapshot = await getDocs(q);
+  
+      // Since we're ordering in descending order, we need to reverse the results to get the correct order
+      querySnapshot.forEach((docSnapshot) => {
+        // Prepend messages to the start of the array to reverse the order
+        messages.unshift(docSnapshot.data());
+      });
+  
     } catch (error) {
-      console.error("Error sending message: ", error);
+      console.error('Error fetching messages:', error);
+      // You may want to handle the error more gracefully in a user-facing application
+    }
+  
+    return messages;
+  };
+
+  const generateAIResponse = async (userMessage, sessionId) => {
+    const messages = await fetchMessages(sessionId);
+
+    const messagesString = messages.map(message => 
+        `${message.sender === currentUser.uid ? "You" : "AI"}: ${message.textContent}`
+      ).join("\n");
+
+    try {
+      const completion = await openai.chat.completions.create({
+        model: "gpt-4",
+        messages: [
+          {
+            role: "system",
+            content: "You are a helpful AI"
+          },
+          { 
+            role: "assistant", 
+            content: "Message History:\n" + messagesString 
+          },
+          { 
+            role: "user", 
+            content: userMessage 
+          }
+        ],
+      });
+
+      return completion.choices[0].message.content;
+    } catch (error) {
+      console.error('Error generating AI response:', error);
+      return '';
     }
   };
+
+
+  const handleSendMessage = async () => {
+    if (message.trim() === '') return;
+  
+    let currentSessionId = currentChatSessionId; // Use the current chat session ID from the context
+  
+    // If a chat session ID does not exist, create a new session and use that ID.
+    if (!currentSessionId) {
+      // Here you would check if there's a chat session already existing for the user before creating a new one
+      const newSessionId = await createChatSession(currentUser.uid);
+      setCurrentChatSessionId(newSessionId); // Update the context with the new session ID
+      currentSessionId = newSessionId; // Use the new session ID for the current operation
+    }
+  
+    // Proceed with the currentSessionId whether it was just created or already existed.
+    if (currentSessionId) {
+      await saveMessage(currentSessionId, currentUser.uid, message);
+      await updateLastMessage(currentSessionId, message);
+
+      // Generate AI Response
+      const aiResponse = await generateAIResponse(message, currentSessionId);
+
+      // Save AI Response to Firestore
+      if (aiResponse) {
+        await saveMessage(currentSessionId, 'AI', aiResponse);
+        await updateLastMessage(currentSessionId, aiResponse);
+      }
+
+      setMessage('');
+    } else {
+      console.error("Failed to create or retrieve a chat session ID.");
+    }
+  };
+  
+  
 
   return (
     <div className={style.messageInputWrapper}>

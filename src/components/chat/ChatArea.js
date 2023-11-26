@@ -1,7 +1,11 @@
+"use client";
+
+import React, { useEffect, useState, useContext } from 'react';
+import { AuthContext } from '../../AuthContext'; // Import AuthContext to access the current user and chat session ID
+import { db } from '../../firebase';
+import { collection, query, orderBy, onSnapshot, doc } from 'firebase/firestore';
 import ChatMessage from './ChatMessage';
 import MessageInput from './MessageInput';
-import React from 'react';
-import { db } from '../../firebase';
 
 const style = {
     chatAreaWrapper: `chat-area flex flex-col h-full mx-2`,
@@ -11,23 +15,39 @@ const style = {
 };
 
 const ChatArea = () => {
-  const messages = [
-    { text: "Hey there. We would like to invite you over to our office for a visit. How about it?", isOwnMessage: false },
-    { text: "All travel expenses are covered by us of course :D", isOwnMessage: false },
-    { text: "It's like a dream come true", isOwnMessage: true },
-    { text: "I accept. Thank you very much.", isOwnMessage: true },
-    { text: "You are welcome. We will stay in touch.", isOwnMessage: false }
-  ];
+  const [messages, setMessages] = useState([]);
+  const { currentChatSessionId } = useContext(AuthContext); // Use AuthContext to get the current chat session ID
+  const { currentUser } = useContext(AuthContext);
+
+  useEffect(() => {
+    if (currentChatSessionId) {
+      const chatSessionRef = doc(db, "chatSessions", currentChatSessionId);
+      const messagesRef = collection(chatSessionRef, "messages");
+      const q = query(messagesRef, orderBy("timestamp", "asc")); // Assuming you have a timestamp field on your messages
+
+      const unsubscribe = onSnapshot(q, (querySnapshot) => {
+        const updatedMessages = querySnapshot.docs.map((doc) => ({
+          id: doc.id,
+          text: doc.data().textContent,
+          // Assuming you have a field to determine if the message is from the current user
+          isOwnMessage: doc.data().sender === currentUser?.uid
+        }));
+        setMessages(updatedMessages);
+      });
+
+      return unsubscribe; // Unsubscribe from the listener when the component unmounts
+    }
+  }, [currentChatSessionId]); // Re-run the effect if the current chat session ID changes
 
   return (
     <div className={style.chatAreaWrapper}>
       <h2 className={style.chatTitle}>
-        Chatting with <b>Mercedes Yemelyan</b>
+        Chatting with <b>Mercedes Yemelyan</b> {/* Update this part to display the correct chat partner's name */}
       </h2>
 
       <div className={style.messagesContainer}>
-        {messages.map((msg, index) => (
-          <ChatMessage key={index} message={msg.text} isOwnMessage={msg.isOwnMessage} />
+        {messages.map((msg) => (
+          <ChatMessage key={msg.id} message={msg.text} isOwnMessage={msg.isOwnMessage} />
         ))}
       </div>
 
