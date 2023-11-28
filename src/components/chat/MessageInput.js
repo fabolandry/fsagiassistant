@@ -4,7 +4,7 @@ import React, { useState, useContext } from 'react';
 import { MdSend } from 'react-icons/md';
 import { db } from '../../firebase';
 import { AuthContext, createChatSession } from '../../AuthContext';
-import { collection, addDoc, serverTimestamp, setDoc, doc, getDocs, query, orderBy, limit } from 'firebase/firestore';
+import { collection, addDoc, serverTimestamp, setDoc, doc, getDocs, query, orderBy, limit, Timestamp, deleteDoc  } from 'firebase/firestore';
 import OpenAI from 'openai';
 
 
@@ -94,38 +94,166 @@ const MessageInput = () => {
     return messages;
   };
 
+  const createEvent = async ({ title, date, startTime, endTime, description, isRepeating = false, repeatFrequency, repeatEndsOn }) => {
+    try {
+  
+      const startDate = new Date(`${date}T${startTime}`);
+      const endDate = new Date(`${date}T${endTime}`);
+  
+      let eventData = {
+        title,
+        description,
+        start: Timestamp.fromDate(startDate),
+        end: Timestamp.fromDate(endDate),
+        isRepeating,
+        userId: currentUser.uid
+      };
+  
+      // Only add repeatFrequency and repeatEndsOn if the event is repeating
+      if (isRepeating) {
+        if (!repeatFrequency) {
+          throw new Error("Repeat frequency is required for repeating events.");
+        }
+  
+        eventData.repeatFrequency = repeatFrequency;
+  
+        if (repeatEndsOn) {
+          const repeatEndsOnDate = new Date(repeatEndsOn);
+          if (isNaN(repeatEndsOnDate.getTime())) {
+            throw new Error("Invalid repeat ends on date value.");
+          }
+          eventData.repeatEndsOn = Timestamp.fromDate(repeatEndsOnDate);
+        }
+      }
+  
+  
+      const docRef = await addDoc(collection(db, 'calendarEvents'), eventData);
+      return JSON.stringify({ status: "success", message: "Event created successfully", eventId: docRef.id });
+    } catch (error) {
+      console.error("Error in creating event:", error);
+      return JSON.stringify({ status: "error", message: error.message });
+    }
+  };
+  
+  
+
+  const deleteEvent = async ({ eventId }) => {
+    try {
+      await deleteDoc(doc(db, 'calendarEvents', eventId));
+      return JSON.stringify({ status: "success", message: "Event deleted successfully" });
+    } catch (error) {
+      console.error("Error in deleting event:", error);
+      return JSON.stringify({ status: "error", message: error.message });
+    }
+  };
+    
+
   const generateAIResponse = async (userMessage, sessionId) => {
     const messages = await fetchMessages(sessionId);
-
+  
     const messagesString = messages.map(message => 
         `${message.sender === currentUser.uid ? "You" : "AI"}: ${message.textContent}`
-      ).join("\n");
-
+    ).join("\n");
+  
+    const tools = [
+      {
+        type: "function",
+        function: {
+          name: "create_event",
+          description: "Create a new event",
+          parameters: {
+            type: "object",
+            properties: {
+              title: { type: "string" },
+              date: { type: "string" },
+              startTime: { type: "string" },
+              endTime: { type: "string" },
+              description: { type: "string" },
+              isRepeating: { type: "boolean" },
+              repeatFrequency: { type: "string" },
+              repeatEndsOn: { type: "string" },
+              userId: { type: "string" },
+            },
+            required: ["title", "date", "startTime", "endTime"],
+          },
+        },
+      },
+      {
+        type: "function",
+        function: {
+          name: "delete_event",
+          description: "Delete an event",
+          parameters: {
+            type: "object",
+            properties: {
+              eventId: { type: "string" },
+            },
+            required: ["eventId"],
+          },
+        },
+      },
+    ];
+  
     try {
       const completion = await openai.chat.completions.create({
         model: "gpt-4",
         messages: [
           {
             role: "system",
-            content: "You are a helpful AI"
+            content: "You are a helpful AI, you can use your tools to create or delete event in the user calendar , you ask clarifications to get all the needed details to create or delete events"
           },
           { 
             role: "assistant", 
             content: "Message History:\n" + messagesString 
+          },
+          {
+            role: "assistant",
+            content: "Make sure that the date and time values are in the correct format (e.g., YYYY-MM-DD for dates and HH:MM for times) and are valid before they are passed to the createEvent function."
           },
           { 
             role: "user", 
             content: userMessage 
           }
         ],
+        tools: tools, // Include the tools for function calling
       });
-
-      return completion.choices[0].message.content;
+  
+      const responseMessage = completion.choices[0].message.content;
+  
+      // Handle function call response
+      if (completion.choices[0].message.tool_calls) {
+        for (const toolCall of completion.choices[0].message.tool_calls) {
+          if (toolCall.function.name === "create_event") {
+            const functionArgs = JSON.parse(toolCall.function.arguments);
+            console.log (functionArgs)
+            try {
+              const functionResponse = await createEvent(functionArgs);
+              console.log (functionResponse)
+              await saveMessage(sessionId, 'AI', `Event created successfully: ${functionResponse.message}`);
+            } catch (error) {
+              await saveMessage(sessionId, 'AI', `Error creating event: ${error.message}`);
+            }
+          } else if (toolCall.function.name === "delete_event") {
+            const functionArgs = JSON.parse(toolCall.function.arguments);
+            try {
+              await deleteEvent(functionArgs);
+              await saveMessage(sessionId, 'AI', "Event deleted successfully.");
+            } catch (error) {
+              await saveMessage(sessionId, 'AI', `Error deleting event: ${error.message}`);
+            }
+          }
+        }
+      }
+  
+      return responseMessage;
     } catch (error) {
       console.error('Error generating AI response:', error);
       return '';
     }
   };
+
+
+  
 
 
   const handleSendMessage = async () => {
