@@ -9,7 +9,7 @@
   --background-end-rgb: 255, 255, 255; /* White background end */
 }
 
-@media (prefers-color-scheme: dark) {
+@media (prefers-color-scheme: light) {
   :root {
     /* Keep your existing dark mode colors */
     --foreground-rgb: 255, 255, 255;

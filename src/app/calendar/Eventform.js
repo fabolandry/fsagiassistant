@@ -5,27 +5,30 @@ import { db } from '../../firebase';
 import { doc, collection, addDoc, updateDoc, deleteDoc, Timestamp } from 'firebase/firestore';
 
 const style = {
-  formWrapper: `flex flex-col h-full p-4 bg-white text-black shadow-md overflow-auto`,
+  formWrapper: `flex flex-col h-full p-2 bg-white text-black shadow-md overflow-auto`,
   formSelect: `mb-4 p-2 border-2 border-gray-200 rounded`,
   formInput: `mb-4 p-2 border-2 border-gray-200 rounded`,
-  formTextarea: `mb-4 p-2 border-2 border-gray-200 rounded`,
+  formTextarea: `mb-4 p-2 border-2 border-gray-200 rounded w-full`,
   formButton: `p-2 mb-2 border-2 border-gray-200 rounded cursor-pointer hover:bg-gray-100`,
   formButtonDelete: `p-2 mb-2 border-2 border-red-500 text-red-500 rounded cursor-pointer hover:bg-red-100`,
   formButtonCancel: `p-2 mb-2 border-2 border-blue-500 text-blue-500 rounded cursor-pointer hover:bg-blue-100`,
   formCheckbox: `mb-4`
 };
 
-const EventForm = ({ selectedDate, eventsOnDate, onClose, user }) => {
+const EventForm = ({ selectedDate, eventsOnDate, user }) => {
   const [eventData, setEventData] = useState({
     title: '',
-    start: selectedDate,
-    end: selectedDate,
+    date: selectedDate,
+    startTime: '08:00',
+    endTime: '09:00',
     description: '',
     isRepeating: false,
     repeatFrequency: 'daily',
     repeatEndsOn: selectedDate
   });
   const [selectedEventId, setSelectedEventId] = useState('');
+
+  
 
   useEffect(() => {
     if (eventsOnDate.length > 0) {
@@ -34,8 +37,9 @@ const EventForm = ({ selectedDate, eventsOnDate, onClose, user }) => {
     } else {
       setEventData({ 
         title: '', 
-        start: selectedDate, 
-        end: selectedDate, 
+        date: selectedDate, 
+        startTime: '08:00', 
+        endTime: '09:00', 
         description: '', 
         isRepeating: false,
         repeatFrequency: 'daily',
@@ -45,27 +49,31 @@ const EventForm = ({ selectedDate, eventsOnDate, onClose, user }) => {
     }
   }, [eventsOnDate, selectedDate]);
 
-  const handleEventSelection = (e) => {
-    const eventId = e.target.value;
-    setSelectedEventId(eventId);
-    const selectedEvent = eventsOnDate.find(event => event.id === eventId);
-    if (selectedEvent) {
-      setEventData(selectedEvent);
-    } else {
-      setEventData({
-        title: '',
-        start: selectedDate,
-        end: selectedDate,
-        description: '',
-        isRepeating: false,
-        repeatFrequency: 'daily',
-        repeatEndsOn: selectedDate
-      });
-    }
-  };
-
   const handleChange = (e) => {
-    setEventData({ ...eventData, [e.target.name]: e.target.value });
+    if (e.target.name === "selectedEventId") {
+      if (e.target.value === "") {
+        // Reset the form when "Create New Event" is selected
+        setEventData({
+          title: '',
+          date: selectedDate,
+          startTime: '08:00',
+          endTime: '09:00',
+          description: '',
+          isRepeating: false,
+          repeatFrequency: 'daily',
+          repeatEndsOn: selectedDate
+        });
+        setSelectedEventId('');
+      } else {
+        // Set selected event details
+        const selectedEvent = eventsOnDate.find(event => event.id === e.target.value);
+        setEventData(selectedEvent);
+        setSelectedEventId(e.target.value);
+      }
+    } else {
+      // Handle other form changes
+      setEventData({ ...eventData, [e.target.name]: e.target.value });
+    }
   };
 
   const handleCheckboxChange = (e) => {
@@ -74,44 +82,96 @@ const EventForm = ({ selectedDate, eventsOnDate, onClose, user }) => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    let data = { ...eventData, userId: user.uid };
   
-    // Convert JavaScript Date objects to Firebase Timestamps
-    if (data.start instanceof Date) {
-      data.start = Timestamp.fromDate(data.start);
-    }
-    if (data.end instanceof Date) {
-      data.end = Timestamp.fromDate(data.end);
-    }
-    if (data.repeatEndsOn instanceof Date) {
-      data.repeatEndsOn = Timestamp.fromDate(data.repeatEndsOn);
-    }
+    // Function to convert date from DD.MM.YYYY to YYYY-MM-DD format
+    const formatDate = (dateString) => {
+        if (!dateString) {
+          throw new Error("Date string is undefined or null");
+        }
+      
+        let parts;
+        if (dateString.includes('-')) {
+          // Format is YYYY-MM-DD
+          parts = dateString.split('-');
+          return `${parts[0]}-${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')}`;
+        } else if (dateString.includes('.')) {
+          // Format is DD.MM.YYYY
+          parts = dateString.split('.');
+          return `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+        } else {
+          throw new Error(`Date string is not in a recognized format: ${dateString}`);
+        }
+      };
+      
+      
   
-    console.log(data); // Check the data being sent
+    try {
+      const formattedDate = formatDate(eventData.date);
+      const startDateString = `${formattedDate}T${eventData.startTime}`;
+      const endDateString = `${formattedDate}T${eventData.endTime}`;
   
-    const eventRef = selectedEventId
-      ? doc(db, 'calendarEvents', selectedEventId)
-      : collection(db, 'calendarEvents');
+      console.log("Start Date String:", startDateString);
+      console.log("End Date String:", endDateString);
   
-    if (selectedEventId) {
-      await updateDoc(eventRef, data);
-    } else {
-      await addDoc(eventRef, data);
+      let startDate = new Date(startDateString);
+      let endDate = new Date(endDateString);
+  
+      if (isNaN(startDate) || isNaN(endDate)) {
+        throw new Error("Invalid date or time value");
+      }
+  
+      let data = { 
+        ...eventData, 
+        userId: user.uid,
+        start: Timestamp.fromDate(startDate),
+        end: Timestamp.fromDate(endDate),
+      };
+  
+      if (eventData.repeatEndsOn instanceof Date) {
+        data.repeatEndsOn = Timestamp.fromDate(eventData.repeatEndsOn);
+      }
+  
+      console.log("Formatted data to be sent:", data);
+  
+      const eventRef = selectedEventId
+        ? doc(db, 'calendarEvents', selectedEventId)
+        : collection(db, 'calendarEvents');
+  
+      if (selectedEventId) {
+        console.log(data)
+        await updateDoc(eventRef, data);
+      } else {
+        await addDoc(eventRef, data);
+      }
+    } catch (error) {
+      console.error("Error in form submission:", error);
     }
-    onClose();
   };
+  
+  
 
   const handleDelete = async () => {
     if (selectedEventId) {
       await deleteDoc(doc(db, 'calendarEvents', selectedEventId));
-      onClose();
     }
   };
 
   return (
     <div className={style.formWrapper}>
       <form onSubmit={handleSubmit}>
-        <select className={style.formSelect} onChange={handleEventSelection} value={selectedEventId}>
+        <input
+          className={style.formInput}
+          type="text"
+          value={selectedDate}
+          readOnly
+          placeholder="Selected Date (mm.dd.yyyy)"
+        />
+        <select 
+          className={style.formSelect} 
+          name="selectedEventId" // Ensure this name attribute is set
+          onChange={handleChange} 
+          value={selectedEventId}
+        >
           <option value="">Create New Event</option>
           {eventsOnDate.map(event => (
             <option key={event.id} value={event.id}>{event.title}</option>
@@ -132,7 +192,6 @@ const EventForm = ({ selectedDate, eventsOnDate, onClose, user }) => {
           onChange={handleChange}
           placeholder="Description"
         />
-        {/* Repeating event checkbox */}
         <div className={style.formCheckbox}>
           <label>
             <input
@@ -142,7 +201,6 @@ const EventForm = ({ selectedDate, eventsOnDate, onClose, user }) => {
             /> Repeat Event
           </label>
         </div>
-        {/* Additional fields for repeating events */}
         {eventData.isRepeating && (
           <>
             <select
@@ -166,13 +224,30 @@ const EventForm = ({ selectedDate, eventsOnDate, onClose, user }) => {
             />
           </>
         )}
+        <input
+          className={style.formInput}
+          type="time"
+          name="startTime"
+          value={eventData.startTime}
+          onChange={handleChange}
+          placeholder="Start Time"
+        />
+        <input
+          className={style.formInput}
+          type="time"
+          name="endTime"
+          value={eventData.endTime}
+          onChange={handleChange}
+          placeholder="End Time"
+          min={eventData.startTime} // Ensure end time is after start time
+        />
         <button className={style.formButton} type="submit">Save</button>
         {selectedEventId && <button className={style.formButtonDelete} type="button" onClick={handleDelete}>Delete</button>}
-        <button className={style.formButtonCancel} type="button" onClick={onClose}>Cancel</button>
       </form>
     </div>
   );
 };
 
 export default EventForm;
+
 
