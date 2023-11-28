@@ -1,8 +1,9 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
 import { db } from '../../firebase';
-import { collection, query, onSnapshot } from 'firebase/firestore';
+import { collection, query, where, orderBy, onSnapshot } from 'firebase/firestore';
+import { AuthContext } from '../../AuthContext';
 
 const style = {
     chatListWrapper: `flex-1 h-full overflow-auto px-2`,
@@ -19,24 +20,56 @@ const style = {
 
 
 const ChatList = () => {
+  const [chatSessions, setChatSessions] = useState([]);
+  const { currentUser, setCurrentChatSessionId } = useContext(AuthContext);
 
-  const chatSessions = []
+  useEffect(() => {
+    if (currentUser) {
+      const chatSessionsRef = collection(db, "chatSessions");
+      const q = query(chatSessionsRef, where('userId', '==', currentUser.uid), orderBy('endTime', 'desc'));
+
+      const unsubscribe = onSnapshot(q, (querySnapshot) => {
+        const sessions = querySnapshot.docs.map(doc => {
+          const sessionData = doc.data();
+          const truncatedLastMessage = sessionData.lastMessage
+            ? `${sessionData.lastMessage.slice(0, 20)}${sessionData.lastMessage.length > 20 ? '...' : ''}`
+            : 'No messages yet';
+          return {
+            id: doc.id,
+            ...sessionData,
+            lastMessage: truncatedLastMessage,
+            timestamp: sessionData.endTime?.toDate().toLocaleString() || 'Date unknown'
+          };
+        });
+        setChatSessions(sessions);
+      });
+
+      // Cleanup the subscription on unmount
+      return () => unsubscribe();
+    }
+  }, [currentUser]);
+
+  const handleChatSessionClick = (sessionId) => {
+    setCurrentChatSessionId(sessionId); // Update the current chat session in context
+  };
 
   return (
     <div className={style.chatListWrapper}>
       <h2 className={style.chatHistoryTitle}>Chat History</h2>
       {chatSessions.map((session) => (
-        <div key={session.id} className={style.chatEntry}>
-          {/* Display chat session details here */}
-          {/* For example, if you have a 'lastMessage' field in your chat session documents */}
+        <div 
+        key={session.id} 
+        className={style.chatEntry} 
+        onClick={() => handleChatSessionClick(session.id)} // Attach onClick event
+        >
+          {/* Display chat session details */}
           <div className={style.chatInfo}>
-            {/* You might want to add a field to your chat documents to store the name */}
+            {/* Replace 'Anonymous' with actual user's name or session identifier */}
             <div className={style.chatName}>{session.name || 'Anonymous'}</div>
             <div className={style.chatLastMessage}><small>{session.lastMessage || 'No messages yet'}</small></div>
           </div>
-          {/* You might want to format the timestamp into a readable date */}
           <div className={style.chatDate}>
-            <small>{new Date(session.timestamp).toLocaleString() || 'Date unknown'}</small>
+            <small>{session.timestamp}</small>
           </div>
         </div>
       ))}

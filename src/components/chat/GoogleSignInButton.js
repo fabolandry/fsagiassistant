@@ -7,7 +7,7 @@ import { auth, provider } from '../../firebase';
 const style = {
     button: `inline-flex items-center justify-center bg-white hover:text-black text-gray-600 font-semibold py-2 px-2 border border-gray-300 rounded shadow-lg`,
     icon: `mr-5`,
-    text: `text-sm`, // Adjust text size as needed
+    text: `text-xs`, // Adjust text size as needed
     googleIcon: `w-10 h-10`, // Adjust Google icon size
     userInfo: `flex flex-col items-center bg-white hover:text-black text-gray-600 font-semibold py-2 px-2 border border-gray-300 rounded shadow-lg`, // Style for user info display
     username: `font-bold`, // Style for username display

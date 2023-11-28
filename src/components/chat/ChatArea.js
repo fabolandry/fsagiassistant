@@ -8,7 +8,7 @@ import ChatMessage from './ChatMessage';
 import MessageInput from './MessageInput';
 
 const style = {
-    chatAreaWrapper: `chat-area flex flex-col h-full mx-2`,
+    chatAreaWrapper: `chat-area flex flex-col h-full mx-2 w-2/3`,
     chatTitle: `text-xl text-black py-1 mb-4 border-b-2 border-gray-200`,
     messagesContainer: `messages flex-1 overflow-auto`,
     messageInputContainer: `message-input mt-auto`
@@ -42,7 +42,7 @@ const ChatArea = () => {
   return (
     <div className={style.chatAreaWrapper}>
       <h2 className={style.chatTitle}>
-        Chatting with <b>Mercedes Yemelyan</b> {/* Update this part to display the correct chat partner's name */}
+        Chatting with <b>Ali</b> {/* Update this part to display the correct chat partner's name */}
       </h2>
 
       <div className={style.messagesContainer}>

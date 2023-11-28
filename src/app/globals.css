@@ -3,13 +3,15 @@
 @tailwind utilities;
 
 :root {
-  --foreground-rgb: 0, 0, 0;
-  --background-start-rgb: 214, 219, 220;
-  --background-end-rgb: 255, 255, 255;
+  /* Set light mode colors */
+  --foreground-rgb: 0, 0, 0; /* Black text */
+  --background-start-rgb: 255, 255, 255; /* White background start */
+  --background-end-rgb: 255, 255, 255; /* White background end */
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
+    /* Keep your existing dark mode colors */
     --foreground-rgb: 255, 255, 255;
     --background-start-rgb: 0, 0, 0;
     --background-end-rgb: 0, 0, 0;

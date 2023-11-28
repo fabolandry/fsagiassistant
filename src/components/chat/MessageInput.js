@@ -3,7 +3,7 @@
 import React, { useState, useContext } from 'react';
 import { MdSend } from 'react-icons/md';
 import { db } from '../../firebase';
-import { AuthContext } from '../../AuthContext';
+import { AuthContext, createChatSession } from '../../AuthContext';
 import { collection, addDoc, serverTimestamp, setDoc, doc, getDocs, query, orderBy, limit } from 'firebase/firestore';
 import OpenAI from 'openai';
 
@@ -42,21 +42,6 @@ const MessageInput = () => {
       timestamp: serverTimestamp(),
       textContent: text
     });
-  };
-
-  // Function to create a new chat session
-  const createChatSession = async (userId) => {
-    try {
-      const chatSessionsRef = collection(db, "chatSessions");
-      const newSessionDocRef = await addDoc(chatSessionsRef, {
-        userId: userId,
-        startTime: serverTimestamp(),
-        lastMessage: ""
-      });
-      return newSessionDocRef.id; // Ensure we return the ID of the new document
-    } catch (error) {
-      console.error("Error creating new chat session:", error);
-    }
   };
   
 
@@ -147,6 +132,8 @@ const MessageInput = () => {
     if (message.trim() === '') return;
   
     let currentSessionId = currentChatSessionId; // Use the current chat session ID from the context
+    let currentMessage = message;
+    setMessage('');
   
     // If a chat session ID does not exist, create a new session and use that ID.
     if (!currentSessionId) {
@@ -158,11 +145,11 @@ const MessageInput = () => {
   
     // Proceed with the currentSessionId whether it was just created or already existed.
     if (currentSessionId) {
-      await saveMessage(currentSessionId, currentUser.uid, message);
-      await updateLastMessage(currentSessionId, message);
+      await saveMessage(currentSessionId, currentUser.uid, currentMessage);
+      await updateLastMessage(currentSessionId, currentMessage);
 
       // Generate AI Response
-      const aiResponse = await generateAIResponse(message, currentSessionId);
+      const aiResponse = await generateAIResponse(currentMessage, currentSessionId);
 
       // Save AI Response to Firestore
       if (aiResponse) {
@@ -170,7 +157,6 @@ const MessageInput = () => {
         await updateLastMessage(currentSessionId, aiResponse);
       }
 
-      setMessage('');
     } else {
       console.error("Failed to create or retrieve a chat session ID.");
     }
