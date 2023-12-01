@@ -77,7 +77,7 @@ const MessageInput = () => {
     setMessage(e.target.value);
   };
 
-  // Function to retrieve the last 150 messages across all chat sessions for the current user
+  // Function to retrieve the last 50 messages across all chat sessions for the current user
 const fetchAllMessages = async () => {
   if (!db) {
     console.error('Firestore instance (db) is null. Make sure it is initialized correctly.');
@@ -93,7 +93,7 @@ const fetchAllMessages = async () => {
 
     for (const sessionDoc of sessionSnapshots.docs) {
       const messagesRef = collection(sessionDoc.ref, "messages");
-      const qMessages = query(messagesRef, orderBy("timestamp", "desc"), limit(150));
+      const qMessages = query(messagesRef, orderBy("timestamp", "desc"), limit(50));
       const messageSnapshots = await getDocs(qMessages);
 
       messageSnapshots.forEach(docSnapshot => {
@@ -104,7 +104,7 @@ const fetchAllMessages = async () => {
     // Sort all messages by timestamp
     messages.sort((a, b) => b.timestamp - a.timestamp);
 
-    // Limit to the last 150 messages
+    // Limit to the last 50 messages
     return messages.slice(0, 50);
   } catch (error) {
     console.error('Error fetching messages:', error);
@@ -308,6 +308,50 @@ const createMultipleEvents = async (events) => {
     ];
   
     try {
+        const entrycompletion = await openai.chat.completions.create ({
+          model: "gpt-4",
+          messages: [
+            {
+              role: "system",
+              content: `You are the awareness tracker of a system. You only reply with yes or not.
+                        You will answer the following question. 
+                        Based on the message history between the user and AI do we know the name and occupation of the user ?`
+            },
+            { 
+              role: "user", 
+              content: "Message History:\n" + messagesString 
+            },
+          ]
+        });
+      
+      
+      console.log (entrycompletion.choices[0].message.content)
+      console.log ( "Message History: " + messagesString)
+
+      if (entrycompletion.choices[0].message.content === 'No') {
+        const firstcompletion = await openai.chat.completions.create ({
+          model: "gpt-4",
+          messages: [
+            {
+              role: "system",
+              content: `You are the greater of the a system. If this is your first time 
+                        to talk to this user (no message history) present yourself as Ali,
+                        the best assistant for freelancer and solopreneur. Ask the name and business line of the user.`
+            },
+            { 
+              role: "user", 
+              content: userMessage 
+            },
+            { 
+              role: "user", 
+              content: "Message History:\n" + messagesString 
+            },
+          ]
+        });
+
+        return firstcompletion.choices[0].message.content;
+      }
+
       const completion = await openai.chat.completions.create({
         model: "gpt-4",
         messages: [
@@ -387,8 +431,8 @@ const createMultipleEvents = async (events) => {
             content: `This is a play and You will not reveal being AI under no condition
                       Make sure no one find out that you are an AI.
                       You are ALI the assistant of an Executive and you are trying to impress your boss
-                      You receive message from a machine you have created and transform them
-                      in human understandable remark.`
+                      You receive message from a machine you have created, you use those message to reply to 
+                      the user inquiry to the best of your ability while adpting to the flow of the conversation`
           },
           { 
             role: "user", 

@@ -47,7 +47,6 @@ const ChatArea = () => {
 
       <div className={style.messagesContainer}>
         {messages.map((msg) => {
-          console.log(msg);
           let messageText = typeof msg.text === 'object' ? JSON.stringify(msg.text) : msg.text;
           return <ChatMessage key={msg.id} message={messageText} isOwnMessage={msg.isOwnMessage} />
         })}
