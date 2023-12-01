@@ -6,7 +6,7 @@ import { collection, query, where, orderBy, onSnapshot } from 'firebase/firestor
 import { AuthContext } from '../../AuthContext';
 
 const style = {
-    chatListWrapper: `flex-1 h-full overflow-auto px-2`,
+    chatListWrapper: `flex-1 h-full w-1/3 overflow-auto px-2`,
     chatHistoryTitle: `text-xl text-black py-1 mb-8 border-b-2 border-gray-200`,
     chatEntry: `cursor-pointer transform hover:scale-105 duration-300 transition-transform bg-white mb-4 rounded p-4 flex shadow-md`,
     chatProfileImageWrapper: `flex-2 w-12 h-12 relative`,
@@ -32,7 +32,7 @@ const ChatList = () => {
         const sessions = querySnapshot.docs.map(doc => {
           const sessionData = doc.data();
           const truncatedLastMessage = sessionData.lastMessage
-            ? `${sessionData.lastMessage.slice(0, 20)}${sessionData.lastMessage.length > 20 ? '...' : ''}`
+            ? `${String(sessionData.lastMessage).slice(0, 20)}${String(sessionData.lastMessage).length > 20 ? '...' : ''}`
             : 'No messages yet';
           return {
             id: doc.id,

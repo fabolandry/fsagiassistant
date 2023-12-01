@@ -8,7 +8,7 @@ const Page = () => {
   return (
     <div className="w-full h-screen flex">
       <Sidebar />
-      <div className="flex-1 bg-gray-100 w-full h-full flex">
+      <div className="flex-1 bg-gray-100 w-4/5 h-full flex">
         <ChatList />
         <ChatArea />
       </div>

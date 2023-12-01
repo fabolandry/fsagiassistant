@@ -1,5 +1,3 @@
-'use client'
-
 import React, { useState, useEffect } from 'react';
 import { db } from '../../firebase';
 import { doc, collection, addDoc, updateDoc, deleteDoc, Timestamp } from 'firebase/firestore';
@@ -11,8 +9,7 @@ const style = {
   formTextarea: `mb-4 p-2 border-2 border-gray-200 rounded w-full`,
   formButton: `p-2 mb-2 border-2 border-gray-200 rounded cursor-pointer hover:bg-gray-100`,
   formButtonDelete: `p-2 mb-2 border-2 border-red-500 text-red-500 rounded cursor-pointer hover:bg-red-100`,
-  formButtonCancel: `p-2 mb-2 border-2 border-blue-500 text-blue-500 rounded cursor-pointer hover:bg-blue-100`,
-  formCheckbox: `mb-4`
+  formButtonCancel: `p-2 mb-2 border-2 border-blue-500 text-blue-500 rounded cursor-pointer hover:bg-blue-100`
 };
 
 const EventForm = ({ selectedDate, eventsOnDate, user }) => {
@@ -21,14 +18,9 @@ const EventForm = ({ selectedDate, eventsOnDate, user }) => {
     date: selectedDate,
     startTime: '08:00',
     endTime: '09:00',
-    description: '',
-    isRepeating: false,
-    repeatFrequency: 'daily',
-    repeatEndsOn: selectedDate
+    description: ''
   });
   const [selectedEventId, setSelectedEventId] = useState('');
-
-  
 
   useEffect(() => {
     if (eventsOnDate.length > 0) {
@@ -40,10 +32,7 @@ const EventForm = ({ selectedDate, eventsOnDate, user }) => {
         date: selectedDate, 
         startTime: '08:00', 
         endTime: '09:00', 
-        description: '', 
-        isRepeating: false,
-        repeatFrequency: 'daily',
-        repeatEndsOn: selectedDate
+        description: ''
       });
       setSelectedEventId('');
     }
@@ -52,38 +41,27 @@ const EventForm = ({ selectedDate, eventsOnDate, user }) => {
   const handleChange = (e) => {
     if (e.target.name === "selectedEventId") {
       if (e.target.value === "") {
-        // Reset the form when "Create New Event" is selected
         setEventData({
           title: '',
           date: selectedDate,
           startTime: '08:00',
           endTime: '09:00',
-          description: '',
-          isRepeating: false,
-          repeatFrequency: 'daily',
-          repeatEndsOn: selectedDate
+          description: ''
         });
         setSelectedEventId('');
       } else {
-        // Set selected event details
         const selectedEvent = eventsOnDate.find(event => event.id === e.target.value);
         setEventData(selectedEvent);
         setSelectedEventId(e.target.value);
       }
     } else {
-      // Handle other form changes
       setEventData({ ...eventData, [e.target.name]: e.target.value });
     }
-  };
-
-  const handleCheckboxChange = (e) => {
-    setEventData({ ...eventData, isRepeating: e.target.checked });
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
   
-    // Function to convert date from DD.MM.YYYY to YYYY-MM-DD format
     const formatDate = (dateString) => {
         if (!dateString) {
           throw new Error("Date string is undefined or null");
@@ -91,11 +69,9 @@ const EventForm = ({ selectedDate, eventsOnDate, user }) => {
       
         let parts;
         if (dateString.includes('-')) {
-          // Format is YYYY-MM-DD
           parts = dateString.split('-');
           return `${parts[0]}-${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')}`;
         } else if (dateString.includes('.')) {
-          // Format is DD.MM.YYYY
           parts = dateString.split('.');
           return `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
         } else {
@@ -103,15 +79,10 @@ const EventForm = ({ selectedDate, eventsOnDate, user }) => {
         }
       };
       
-      
-  
     try {
       const formattedDate = formatDate(eventData.date);
       const startDateString = `${formattedDate}T${eventData.startTime}`;
       const endDateString = `${formattedDate}T${eventData.endTime}`;
-  
-      console.log("Start Date String:", startDateString);
-      console.log("End Date String:", endDateString);
   
       let startDate = new Date(startDateString);
       let endDate = new Date(endDateString);
@@ -124,21 +95,14 @@ const EventForm = ({ selectedDate, eventsOnDate, user }) => {
         ...eventData, 
         userId: user.uid,
         start: Timestamp.fromDate(startDate),
-        end: Timestamp.fromDate(endDate),
+        end: Timestamp.fromDate(endDate)
       };
-  
-      if (eventData.repeatEndsOn instanceof Date) {
-        data.repeatEndsOn = Timestamp.fromDate(eventData.repeatEndsOn);
-      }
-  
-      console.log("Formatted data to be sent:", data);
   
       const eventRef = selectedEventId
         ? doc(db, 'calendarEvents', selectedEventId)
         : collection(db, 'calendarEvents');
   
       if (selectedEventId) {
-        console.log(data)
         await updateDoc(eventRef, data);
       } else {
         await addDoc(eventRef, data);
@@ -147,8 +111,6 @@ const EventForm = ({ selectedDate, eventsOnDate, user }) => {
       console.error("Error in form submission:", error);
     }
   };
-  
-  
 
   const handleDelete = async () => {
     if (selectedEventId) {
@@ -168,7 +130,7 @@ const EventForm = ({ selectedDate, eventsOnDate, user }) => {
         />
         <select 
           className={style.formSelect} 
-          name="selectedEventId" // Ensure this name attribute is set
+          name="selectedEventId"
           onChange={handleChange} 
           value={selectedEventId}
         >
@@ -192,38 +154,6 @@ const EventForm = ({ selectedDate, eventsOnDate, user }) => {
           onChange={handleChange}
           placeholder="Description"
         />
-        <div className={style.formCheckbox}>
-          <label>
-            <input
-              type="checkbox"
-              checked={eventData.isRepeating}
-              onChange={handleCheckboxChange}
-            /> Repeat Event
-          </label>
-        </div>
-        {eventData.isRepeating && (
-          <>
-            <select
-              className={style.formSelect}
-              name="repeatFrequency"
-              value={eventData.repeatFrequency}
-              onChange={handleChange}
-            >
-              <option value="daily">Daily</option>
-              <option value="weekly">Weekly</option>
-              <option value="monthly">Monthly</option>
-              <option value="yearly">Yearly</option>
-            </select>
-            <input
-              className={style.formInput}
-              type="date"
-              name="repeatEndsOn"
-              value={eventData.repeatEndsOn}
-              onChange={handleChange}
-              placeholder="Repeat ends on"
-            />
-          </>
-        )}
         <input
           className={style.formInput}
           type="time"
@@ -239,7 +169,7 @@ const EventForm = ({ selectedDate, eventsOnDate, user }) => {
           value={eventData.endTime}
           onChange={handleChange}
           placeholder="End Time"
-          min={eventData.startTime} // Ensure end time is after start time
+          min={eventData.startTime}
         />
         <button className={style.formButton} type="submit">Save</button>
         {selectedEventId && <button className={style.formButtonDelete} type="button" onClick={handleDelete}>Delete</button>}
@@ -249,5 +179,3 @@ const EventForm = ({ selectedDate, eventsOnDate, user }) => {
 };
 
 export default EventForm;
-
-

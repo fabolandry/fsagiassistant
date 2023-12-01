@@ -4,7 +4,7 @@ import React, { useState, useContext } from 'react';
 import { MdSend } from 'react-icons/md';
 import { db } from '../../firebase';
 import { AuthContext, createChatSession } from '../../AuthContext';
-import { collection, addDoc, serverTimestamp, setDoc, doc, getDocs, query, orderBy, limit, Timestamp, deleteDoc  } from 'firebase/firestore';
+import { collection, addDoc, updateDoc, serverTimestamp, setDoc, where, doc, getDocs, query, orderBy, limit, Timestamp, deleteDoc  } from 'firebase/firestore';
 import OpenAI from 'openai';
 
 
@@ -15,7 +15,7 @@ const openai = new OpenAI({
 
 
 const style = {
-    messageInputWrapper: `flex-2 pt-4 pb-4`,
+    messageInputWrapper: `w-11/12 pt-4 pb-4`,
     messageInputGroup: `write bg-white shadow flex rounded-lg`,
     iconContainer: `flex-3 flex content-center items-center text-center p-4 pr-0`,
     // Add styles for any icons or additional elements
@@ -59,139 +59,234 @@ const MessageInput = () => {
     setMessage(e.target.value);
   };
 
-  // Function to retrieve the last 100 messages for the current session
-  const fetchMessages = async (chatSessionId) => {
-    if (!db) {
-      console.error('Firestore instance (db) is null. Make sure it is initialized correctly.');
-      return [];
-    }
-    if (!chatSessionId) {
-      console.error('Session ID is null. Make sure it is being set correctly.');
-      return [];
-    }
-  
-    const messages = [];
-    try {
-      const chatSessionRef = doc(db, "chatSessions", chatSessionId);
-      const messagesRef = collection(chatSessionRef, "messages");
-  
-      // Order by 'timestamp' and limit to the last 100 messages
-      const q = query(messagesRef, orderBy("timestamp", "desc"), limit(100));
-  
-      const querySnapshot = await getDocs(q);
-  
-      // Since we're ordering in descending order, we need to reverse the results to get the correct order
-      querySnapshot.forEach((docSnapshot) => {
-        // Prepend messages to the start of the array to reverse the order
-        messages.unshift(docSnapshot.data());
-      });
-  
-    } catch (error) {
-      console.error('Error fetching messages:', error);
-      // You may want to handle the error more gracefully in a user-facing application
-    }
-  
-    return messages;
-  };
+  // Function to retrieve the last 150 messages across all chat sessions for the current user
+const fetchAllMessages = async () => {
+  if (!db) {
+    console.error('Firestore instance (db) is null. Make sure it is initialized correctly.');
+    return [];
+  }
 
-  const createEvent = async ({ title, date, startTime, endTime, description, isRepeating = false, repeatFrequency, repeatEndsOn }) => {
+  const messages = [];
+  try {
+    // First, get all chat session IDs for the current user
+    const chatSessionsRef = collection(db, "chatSessions");
+    const qSessions = query(chatSessionsRef, where("userId", "==", currentUser.uid));
+    const sessionSnapshots = await getDocs(qSessions);
+
+    for (const sessionDoc of sessionSnapshots.docs) {
+      const messagesRef = collection(sessionDoc.ref, "messages");
+      const qMessages = query(messagesRef, orderBy("timestamp", "desc"), limit(150));
+      const messageSnapshots = await getDocs(qMessages);
+
+      messageSnapshots.forEach(docSnapshot => {
+        messages.push(docSnapshot.data());
+      });
+    }
+
+    // Sort all messages by timestamp
+    messages.sort((a, b) => b.timestamp - a.timestamp);
+
+    // Limit to the last 150 messages
+    return messages.slice(0, 150);
+  } catch (error) {
+    console.error('Error fetching messages:', error);
+    return [];
+  }
+};
+
+
+  // Function to create multiple events
+const createMultipleEvents = async (events) => {
+  const responses = [];
+
+  for (const event of events) {
     try {
-  
-      const startDate = new Date(`${date}T${startTime}`);
-      const endDate = new Date(`${date}T${endTime}`);
-  
+      const startDate = new Date(`${event.date}T${event.startTime}`);
+      const endDate = new Date(`${event.date}T${event.endTime}`);
+
       let eventData = {
-        title,
-        description,
+        title: event.title,
+        description: event.description,
+        date: event.date,
+        startTime: event.startTime,
+        endTime: event.endTime,
         start: Timestamp.fromDate(startDate),
         end: Timestamp.fromDate(endDate),
-        isRepeating,
         userId: currentUser.uid
       };
-  
-      // Only add repeatFrequency and repeatEndsOn if the event is repeating
-      if (isRepeating) {
-        if (!repeatFrequency) {
-          throw new Error("Repeat frequency is required for repeating events.");
-        }
-  
-        eventData.repeatFrequency = repeatFrequency;
-  
-        if (repeatEndsOn) {
-          const repeatEndsOnDate = new Date(repeatEndsOn);
-          if (isNaN(repeatEndsOnDate.getTime())) {
-            throw new Error("Invalid repeat ends on date value.");
-          }
-          eventData.repeatEndsOn = Timestamp.fromDate(repeatEndsOnDate);
-        }
-      }
-  
-  
+
       const docRef = await addDoc(collection(db, 'calendarEvents'), eventData);
-      return JSON.stringify({ status: "success", message: "Event created successfully", eventId: docRef.id });
+      responses.push({ status: "success", message: "Event created successfully", eventId: docRef.id });
     } catch (error) {
       console.error("Error in creating event:", error);
-      return JSON.stringify({ status: "error", message: error.message });
+      responses.push({ status: "error", message: error.message });
+    }
+  }
+
+  return responses;
+};
+ 
+
+  const deleteMultipleEvents = async (eventIds) => {
+    const responses = [];
+    for (const eventId of eventIds) {
+      try {
+        await deleteDoc(doc(db, 'calendarEvents', eventId));
+        responses.push({ status: "success", message: "Event deleted successfully", eventId: eventId });
+      } catch (error) {
+        console.error("Error in deleting event:", error);
+        responses.push({ status: "error", message: error.message, eventId: eventId });
+      }
+    }
+    return responses;
+  };
+
+  const searchEvents_fd = async (searchTerm) => {
+    const eventsRef = collection(db, "calendarEvents");
+    const querySnapshot = await getDocs(eventsRef);
+    return querySnapshot.docs
+      .filter(doc => 
+        doc.data().title.toLowerCase().includes(searchTerm.toLowerCase()) || 
+        doc.data().description.toLowerCase().includes(searchTerm.toLowerCase())
+      )
+      .map(doc => doc.id);
+  };
+
+  const searchEvents = async (searchTerm) => {
+    try {
+      const eventsRef = collection(db, "calendarEvents");
+      const q = query(eventsRef, where("userId", "==", currentUser.uid));
+      const querySnapshot = await getDocs(q);
+      return querySnapshot.docs
+        .filter(doc => 
+          doc.data().title.toLowerCase().includes(searchTerm.toLowerCase()) || 
+          doc.data().description.toLowerCase().includes(searchTerm.toLowerCase())
+        )
+        .map(doc => {
+          const data = doc.data();
+          const startDate = data.start.toDate().toLocaleString();
+          const endDate = data.end.toDate().toLocaleString();
+          return `${doc.id}, ${data.title}, ${data.description}, ${startDate}, ${endDate}`;
+        });
+    } catch (error) {
+      console.error("Error in searching events:", error);
+      return []; // Return an empty array in case of an error
     }
   };
-  
   
 
-  const deleteEvent = async ({ eventId }) => {
+  const queryCalendarEvents = async (currentUser) => {
     try {
-      await deleteDoc(doc(db, 'calendarEvents', eventId));
-      return JSON.stringify({ status: "success", message: "Event deleted successfully" });
+      const eventsRef = collection(db, 'calendarEvents');
+      const q = query(eventsRef, where("userId", "==", currentUser.uid));
+      const querySnapshot = await getDocs(q);
+      return querySnapshot.docs.map(doc => {
+        const data = doc.data();
+        
+        // Convert Timestamp to JavaScript Date object and then to a readable string
+        const startDate = data.start.toDate().toLocaleString(); // Converts start time
+        const endDate = data.end.toDate().toLocaleString(); // Converts end time
+
+        // Format the string with readable date and time
+        return `${doc.id}, ${data.title}, ${data.description}, ${startDate}, ${endDate}, ${data.date}`;
+      });
     } catch (error) {
-      console.error("Error in deleting event:", error);
-      return JSON.stringify({ status: "error", message: error.message });
+      console.error("Error in querying calendar events:", error);
+      return []; // Return an empty array in case of an error
     }
   };
-    
+
+  const searchAndDelete = async (searchTerm) => {
+    try {
+      const eventIds = await searchEvents_fd(searchTerm);
+      const deleteResponses = await deleteMultipleEvents(eventIds);
+      return deleteResponses;
+    } catch (error) {
+      console.error("Error in search and delete:", error);
+      return { status: "error", message: error.message };
+    }
+  };
+
 
   const generateAIResponse = async (userMessage, sessionId) => {
-    const messages = await fetchMessages(sessionId);
-  
-    const messagesString = messages.map(message => 
-        `${message.sender === currentUser.uid ? "You" : "AI"}: ${message.textContent}`
-    ).join("\n");
-  
+    const messages = await fetchAllMessages();
+
+    const messagesString = messages.map(message => {
+    // Check if the message has a sender and text content
+    if (message.sender && message.textContent) {
+      return `${message.sender === currentUser.uid ? "You" : "AI"}: ${message.textContent}`;
+    }
+    return "Unknown message format"; // Or any other placeholder text
+    }).join("\n");
+
     const tools = [
       {
         type: "function",
         function: {
-          name: "create_event",
-          description: "Create a new event",
+          name: "create_multiple_events",
+          description: "Create multiple events",
           parameters: {
             type: "object",
             properties: {
-              title: { type: "string" },
-              date: { type: "string" },
-              startTime: { type: "string" },
-              endTime: { type: "string" },
-              description: { type: "string" },
-              isRepeating: { type: "boolean" },
-              repeatFrequency: { type: "string" },
-              repeatEndsOn: { type: "string" },
-              userId: { type: "string" },
+              events: {
+                type: "array",
+                items: {
+                  type: "object",
+                  properties: {
+                    title: { type: "string" },
+                    date: { type: "string" },
+                    startTime: { type: "string" },
+                    endTime: { type: "string" },
+                    description: { type: "string" },
+                  },
+                  required: ["title", "date", "startTime", "endTime", "description"],
+                },
+              },
             },
-            required: ["title", "date", "startTime", "endTime"],
+            required: ["events"],
           },
         },
       },
       {
         type: "function",
         function: {
-          name: "delete_event",
-          description: "Delete an event",
+          name: "query_calendar_events",
+          description: "Query all calendar events for the current user",
+          parameters: {
+            type: "object",
+            properties: {}
+          },
+          required: []
+        }
+      },
+      {
+        type: "function",
+        function: {
+          name: "search_events",
+          description: "Search events based on partial matches in titles or descriptions",
           parameters: {
             type: "object",
             properties: {
-              eventId: { type: "string" },
+              searchTerm: { type: "string" }
             },
-            required: ["eventId"],
+            required: ["searchTerm"]
           },
         },
       },
+      {
+        type: "function",
+        function: {
+          name: "search_and_delete",
+          description: "Search and delete events based on a search term",
+          parameters: {
+            type: "object",
+            properties: {
+              searchTerm: { type: "string" }
+            },
+            required: ["searchTerm"]
+          },
+        },
+      }
     ];
   
     try {
@@ -203,7 +298,7 @@ const MessageInput = () => {
             content: "You are a helpful AI, you can use your tools to create or delete event in the user calendar , you ask clarifications to get all the needed details to create or delete events"
           },
           { 
-            role: "assistant", 
+            role: "user", 
             content: "Message History:\n" + messagesString 
           },
           {
@@ -223,23 +318,40 @@ const MessageInput = () => {
       // Handle function call response
       if (completion.choices[0].message.tool_calls) {
         for (const toolCall of completion.choices[0].message.tool_calls) {
-          if (toolCall.function.name === "create_event") {
-            const functionArgs = JSON.parse(toolCall.function.arguments);
-            console.log (functionArgs)
+          if (toolCall.function.name === "create_multiple_events") {
+            const functionArgs = JSON.parse(toolCall.function.arguments).events; // Access the 'events' array
             try {
-              const functionResponse = await createEvent(functionArgs);
-              console.log (functionResponse)
-              await saveMessage(sessionId, 'AI', `Event created successfully: ${functionResponse.message}`);
+              const functionResponses = await createMultipleEvents(functionArgs);
+              for (const response of functionResponses) {
+                await saveMessage(sessionId, 'AI', `Event creation status: ${response.message}`);
+              }
             } catch (error) {
-              await saveMessage(sessionId, 'AI', `Error creating event: ${error.message}`);
+              await saveMessage(sessionId, 'AI', `Error creating events: ${error.message}`);
             }
-          } else if (toolCall.function.name === "delete_event") {
-            const functionArgs = JSON.parse(toolCall.function.arguments);
+          } else if (toolCall.function.name === "query_calendar_events") {
             try {
-              await deleteEvent(functionArgs);
-              await saveMessage(sessionId, 'AI', "Event deleted successfully.");
+              const eventsData = await queryCalendarEvents(currentUser);
+              await saveMessage(sessionId, 'AI', `Calendar events fetched: ${eventsData}`);
             } catch (error) {
-              await saveMessage(sessionId, 'AI', `Error deleting event: ${error.message}`);
+              await saveMessage(sessionId, 'AI', `Error querying calendar events: ${error.message}`);
+            } 
+          } else if (toolCall.function.name === "search_events") {
+            const searchTerm = JSON.parse(toolCall.function.arguments).searchTerm;
+            try {
+              const searchResults = await searchEvents(searchTerm);
+              await saveMessage(sessionId, 'AI', `Search results: ${searchResults.join(', ')}`);
+            } catch (error) {
+              await saveMessage(sessionId, 'AI', `Error searching events: ${error.message}`);
+            }
+          } else if (toolCall.function.name === "search_and_delete") {
+            const searchTerm = JSON.parse(toolCall.function.arguments).searchTerm;
+            try {
+              const deleteResponses = await searchAndDelete(searchTerm);
+              for (const response of deleteResponses) {
+                await saveMessage(sessionId, 'AI', `Delete status for ${response.eventId}: ${response.message}`);
+              }
+            } catch (error) {
+              await saveMessage(sessionId, 'AI', `Error in search and delete: ${error.message}`);
             }
           }
         }
@@ -251,10 +363,6 @@ const MessageInput = () => {
       return '';
     }
   };
-
-
-  
-
 
   const handleSendMessage = async () => {
     if (message.trim() === '') return;
