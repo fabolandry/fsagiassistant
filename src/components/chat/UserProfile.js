@@ -2,8 +2,8 @@ import React from 'react';
 
 const style = {
     userProfileWrapper: `text-center user-profile`,
-    profileImageContainer: `w-32 h-32 rounded-full m-auto mt-16 border-2 border-white bg-white shadow-lg`,
-    profileImage: `block`,
+    profileImageContainer: `w-32 h-32 rounded-lg m-auto mt-16 border-2 border-white bg-white shadow-lg`,
+    profileImage: `block rounded-lg`,
     userName: `text-gray-800 mt-8`,
     // Add more styles if needed for SVG or other elements
 };

@@ -74,7 +74,12 @@ const MessageInput = () => {
   
 
   const handleInputChange = (e) => {
-    setMessage(e.target.value);
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault(); // Prevent the default action to stop from adding a new line
+      handleSendMessage(); // Call the send message function
+    } else {
+      setMessage(e.target.value);
+    }
   };
 
   // Function to retrieve the last 50 messages across all chat sessions for the current user
@@ -503,13 +508,14 @@ const createMultipleEvents = async (events) => {
           {/* Icons or additional elements can be added here */}
         </div>
         <div className={style.textareaContainer}>
-          <textarea
+        <textarea
             name="message"
             className={style.textarea}
             rows="1"
             placeholder="Type a message..."
             value={message}
             onChange={handleInputChange}
+            onKeyDown={handleInputChange} // Add this line
             autoFocus
           />
         </div>
