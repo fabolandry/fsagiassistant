@@ -31,6 +31,7 @@ const style = {
 const MessageInput = () => {
   const [message, setMessage] = useState('');
   const { currentUser, currentChatSessionId, setCurrentChatSessionId } = useContext(AuthContext);
+  const [allMessages, setAllMessages] = useState([]);
 
   // Function to save a message
   const saveMessage = async (chatSessionId, userId, text) => {
@@ -43,6 +44,23 @@ const MessageInput = () => {
       textContent: text
     });
   };
+
+
+  const saveAndPrintMessages = (chatSessionId, userId, text) => {
+    // Create a new message object
+    const newMessage = { chatSessionId, userId, text };
+
+    // Use a temporary variable to accumulate messages
+    const updatedMessages = [...allMessages, newMessage];
+
+    // Generate the message string using updatedMessages
+    const messagesString = updatedMessages.map(m => `Session: ${m.chatSessionId}, User: ${m.userId}, Text: ${m.text}`).join("\n");
+
+    // Log the message string to the console
+    console.log(messagesString);
+
+    return messagesString
+};
   
 
   // Function to update the last message in a chat session
@@ -87,7 +105,7 @@ const fetchAllMessages = async () => {
     messages.sort((a, b) => b.timestamp - a.timestamp);
 
     // Limit to the last 150 messages
-    return messages.slice(0, 150);
+    return messages.slice(0, 50);
   } catch (error) {
     console.error('Error fetching messages:', error);
     return [];
@@ -295,7 +313,11 @@ const createMultipleEvents = async (events) => {
         messages: [
           {
             role: "system",
-            content: "You are a helpful AI, you can use your tools to create or delete event in the user calendar , you ask clarifications to get all the needed details to create or delete events"
+            content: `You are a helpful AI, you can use your tools to create or delete event in the user calendar , 
+                      You ask clarifications to get all the needed details to create or delete events
+                      When the user ask to update one or many events, you must search for the events first using search_events,
+                      You must then confirm the change to be applied, You can then search and delete the corresponding events
+                      and then create new events with the new parameters`
           },
           { 
             role: "user", 
@@ -313,7 +335,7 @@ const createMultipleEvents = async (events) => {
         tools: tools, // Include the tools for function calling
       });
   
-      const responseMessage = completion.choices[0].message.content;
+      let responseMessage = completion.choices[0].message.content;
   
       // Handle function call response
       if (completion.choices[0].message.tool_calls) {
@@ -323,39 +345,69 @@ const createMultipleEvents = async (events) => {
             try {
               const functionResponses = await createMultipleEvents(functionArgs);
               for (const response of functionResponses) {
-                await saveMessage(sessionId, 'AI', `Event creation status: ${response.message}`);
+              saveAndPrintMessages(sessionId, 'AI', `Event creation status: ${response.message}`);
               }
             } catch (error) {
-              await saveMessage(sessionId, 'AI', `Error creating events: ${error.message}`);
+              saveAndPrintMessages(sessionId, 'AI', `Error creating events: ${error.message}`);
             }
           } else if (toolCall.function.name === "query_calendar_events") {
             try {
               const eventsData = await queryCalendarEvents(currentUser);
-              await saveMessage(sessionId, 'AI', `Calendar events fetched: ${eventsData}`);
+              saveAndPrintMessages(sessionId, 'AI', `Calendar events fetched: ${eventsData}`);
             } catch (error) {
-              await saveMessage(sessionId, 'AI', `Error querying calendar events: ${error.message}`);
+              saveAndPrintMessages(sessionId, 'AI', `Error querying calendar events: ${error.message}`);
             } 
           } else if (toolCall.function.name === "search_events") {
             const searchTerm = JSON.parse(toolCall.function.arguments).searchTerm;
             try {
               const searchResults = await searchEvents(searchTerm);
-              await saveMessage(sessionId, 'AI', `Search results: ${searchResults.join(', ')}`);
+              saveAndPrintMessages(sessionId, 'AI', `Search results: ${searchResults.join(', ')}`);
             } catch (error) {
-              await saveMessage(sessionId, 'AI', `Error searching events: ${error.message}`);
+              saveAndPrintMessages(sessionId, 'AI', `Error searching events: ${error.message}`);
             }
           } else if (toolCall.function.name === "search_and_delete") {
             const searchTerm = JSON.parse(toolCall.function.arguments).searchTerm;
             try {
               const deleteResponses = await searchAndDelete(searchTerm);
               for (const response of deleteResponses) {
-                await saveMessage(sessionId, 'AI', `Delete status for ${response.eventId}: ${response.message}`);
+                saveAndPrintMessages(sessionId, 'AI', `Delete status for ${response.eventId}: ${response.message}`);
               }
             } catch (error) {
-              await saveMessage(sessionId, 'AI', `Error in search and delete: ${error.message}`);
+                saveAndPrintMessages(sessionId, 'AI', `Error in search and delete: ${error.message}`);
             }
           }
         }
       }
+
+      const extracompletion = await openai.chat.completions.create({
+        model: "gpt-4-1106-preview",
+        messages: [
+          {
+            role: "system",
+            content: `This is a play and You will not reveal being AI under no condition
+                      Make sure no one find out that you are an AI.
+                      You are ALI the assistant of an Executive and you are trying to impress your boss
+                      You receive message from a machine you have created and transform them
+                      in human understandable remark.`
+          },
+          { 
+            role: "user", 
+            content: "Message History:\n" + messagesString 
+          },
+          { 
+            role: "user", 
+            content: "Machine message :\n" + allMessages 
+          },
+          { 
+            role: "user", 
+            content: userMessage 
+          },
+        ]
+      });
+
+      responseMessage = extracompletion.choices[0].message.content;
+
+      setAllMessages([]);
   
       return responseMessage;
     } catch (error) {

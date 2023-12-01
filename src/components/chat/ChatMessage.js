@@ -9,7 +9,7 @@ const style = {
     profileImage: `w-12 h-12 rounded-full mx-auto`,
     statusIndicator: `absolute w-4 h-4 bg-gray-400 rounded-full right-0 bottom-0 border-2 border-white`,
     messageContent: (isOwnMessage) => `flex-1 px-2`,
-    messageBubble: (isOwnMessage) => `inline-block ${isOwnMessage ? "bg-blue-600 text-white" : "bg-gray-300 text-gray-700"} rounded-full p-2 px-6`,
+    messageBubble: (isOwnMessage) => `inline-block ${isOwnMessage ? "bg-blue-600 text-white" : "bg-gray-300 text-gray-700"} rounded-lg p-2 max-w-xs sm:max-w-sm md:max-w-md break-words text-sm`,
     messageTime: (isOwnMessage) => `${isOwnMessage ? 'pr-4' : 'pl-4'} text-gray-500`
 };
 
