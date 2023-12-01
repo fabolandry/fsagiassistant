@@ -54,12 +54,12 @@ const MessageInput = () => {
     const updatedMessages = [...allMessages, newMessage];
 
     // Generate the message string using updatedMessages
-    const messagesString = updatedMessages.map(m => `Session: ${m.chatSessionId}, User: ${m.userId}, Text: ${m.text}`).join("\n");
+    const toolreply = updatedMessages.map(m => `Session: ${m.chatSessionId}, User: ${m.userId}, Text: ${m.text}`).join("\n");
 
     // Log the message string to the console
-    console.log(messagesString);
+    console.log(toolreply);
 
-    return messagesString
+    return toolreply
 };
   
 
@@ -355,6 +355,76 @@ const createMultipleEvents = async (events) => {
         });
 
         return firstcompletion.choices[0].message.content;
+      }
+
+      const prompteval1 = await openai.chat.completions.create ({
+        model: "gpt-4",
+        messages: [
+          {
+            role: "system",
+            content: `You are a promt checker part of system. It's important that you reply only by Yes or No.
+                      Does the current user inquiry involve scheduling any activity?`
+          },
+          { 
+            role: "user", 
+            content: userMessage 
+          },
+        ]
+      });
+
+      console.log ('Scheduling related ? ' + prompteval1.choices[0].message.content)
+
+      if (prompteval1.choices[0].message.content === 'Yes') {
+        const schedulerinfochecker = await openai.chat.completions.create ({
+          model: "gpt-4",
+          messages: [
+            {
+              role: "system",
+              content: `You are a promt checker part of system. It's important that you reply only by Yes or No.
+                        Do we have enough information to create the corresponding events in the calendar user ?
+                        Please also check the conversation history. If we have the Title, The date and the start and End time we can assume we have enought information.`
+            },
+            { 
+              role: "user", 
+              content: userMessage 
+            },
+            { 
+              role: "user", 
+              content: "Message History:\n" + messagesString 
+            },
+          ]
+        });
+        console.log ('Sufficient info ? ' + schedulerinfochecker.choices[0].message.content)
+        if (schedulerinfochecker.choices[0].message.content === 'No') {
+          const eventsData = await queryCalendarEvents(currentUser);
+          saveAndPrintMessages(sessionId, 'AI', `Calendar events fetched: ${eventsData}`);
+          //Base on the current calendar event, and some smart and common sense assumption, propose the list of event that should added to the calendar. 
+          const eventcreator = await openai.chat.completions.create ({
+            model: "gpt-4",
+            messages: [
+              {
+                role: "system",
+                content: `You are an planner/scheduler. You will create a list of event base on the user inquiry, the current calendar events
+                and you best educated guess. You need at least the Title in order to create an event. Each event that you create should have a Title, A Description, a start time, a end time and a date.
+                You will propose that list of event to the use for approval. Make sure to be friendly and profeesional. Always include the Title the Description and the Date and Time of every event
+                Communication in a humanlike manner, Don't just throw a list at the user, Also check the conversion history to build your assumption`
+              },
+              { 
+                role: "assistant", 
+                content: "Message History:\n" + messagesString 
+              },
+              { 
+                role: "user", 
+                content: userMessage 
+              },
+              { 
+                role: "user", 
+                content: "Current Calendar Events" + allMessages 
+              },
+            ]
+          });
+          return eventcreator.choices[0].message.content;
+        }
       }
 
       const completion = await openai.chat.completions.create({
