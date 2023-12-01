@@ -197,6 +197,8 @@ const createMultipleEvents = async (events) => {
     }
   };
   
+  const currentDate = new Date();
+  const dateString = currentDate.toISOString().split('T')[0];
 
   const queryCalendarEvents = async (currentUser) => {
     try {
@@ -358,7 +360,7 @@ const createMultipleEvents = async (events) => {
       }
 
       const prompteval1 = await openai.chat.completions.create ({
-        model: "gpt-4",
+        model: "gpt-3.5-turbo-1106",
         messages: [
           {
             role: "system",
@@ -376,7 +378,7 @@ const createMultipleEvents = async (events) => {
 
       if (prompteval1.choices[0].message.content === 'Yes') {
         const schedulerinfochecker = await openai.chat.completions.create ({
-          model: "gpt-4",
+          model: "gpt-3.5-turbo-1106",
           messages: [
             {
               role: "system",
@@ -414,11 +416,15 @@ const createMultipleEvents = async (events) => {
               },
               { 
                 role: "user", 
-                content: userMessage 
+                content: "Todays date is:\n" + dateString 
               },
               { 
                 role: "user", 
-                content: "Current Calendar Events" + allMessages 
+                content: "User Inquiry:\n" + userMessage 
+              },
+              { 
+                role: "user", 
+                content: "Current Calendar Events:\n" + allMessages 
               },
             ]
           });
@@ -447,7 +453,7 @@ const createMultipleEvents = async (events) => {
           },
           { 
             role: "user", 
-            content: userMessage 
+            content: "Todays date is:\n" + dateString + "User Inquiry:\n" + userMessage 
           }
         ],
         tools: tools, // Include the tools for function calling
