@@ -381,12 +381,11 @@ const createMultipleEvents = async (events) => {
             {
               role: "system",
               content: `You are a promt checker part of system. It's important that you reply only by Yes or No.
-                        Do we have enough information to create the corresponding events in the calendar user ?
-                        Please also check the conversation history. If we have the Title, The date and the start and End time we can assume we have enought information.`
+                        Do we have a Name, a Date and start and a End for all the event in the Message History and/or The user inquiry?  `
             },
             { 
               role: "user", 
-              content: userMessage 
+              content: "User Inquiry:\n" + userMessage 
             },
             { 
               role: "user", 
